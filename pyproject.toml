@@ -1,0 +1,24 @@
+[project]
+name = "tradebot"
+version = "0.1.0"
+description = "Binance trade bot: plain-text orders with a confirm step"
+requires-python = ">=3.11"
+dependencies = [
+    "httpx>=0.27",
+    "pydantic>=2.6",
+    "pydantic-settings>=2.2",
+    "fastapi>=0.110",
+    "uvicorn>=0.29",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8", "respx>=0.21"]
+
+[project.scripts]
+tradebot = "tradebot.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["tradebot*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
