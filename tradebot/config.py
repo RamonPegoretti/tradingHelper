@@ -8,6 +8,7 @@ from pydantic import field_validator
 from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 BASE_URLS = {
+    "demo": {"spot": "", "futures": ""},
     "testnet": {
         "spot": "https://testnet.binance.vision",
         "futures": "https://testnet.binancefuture.com",
@@ -22,7 +23,8 @@ BASE_URLS = {
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_prefix="TRADEBOT_", env_file=".env", extra="ignore")
 
-    env: Literal["testnet", "live"] = "testnet"
+    # "demo" = fake in-memory exchange, no keys needed, nothing sent anywhere.
+    env: Literal["demo", "testnet", "live"] = "testnet"
 
     spot_api_key: str = ""
     spot_api_secret: str = ""
@@ -42,6 +44,13 @@ class Settings(BaseSettings):
     maint_margin_rate: float = 0.004
 
     db_path: str = "tradebot.db"
+
+    # Web login (milestone 4). Generate both with: python -m tradebot.auth
+    web_password_hash: str = ""
+    web_totp_secret: str = ""
+    web_session_hours: float = 12
+    # Set true when served over HTTPS (e.g. `tailscale serve`), so the cookie is HTTPS-only.
+    web_cookie_secure: bool = False
     recv_window_ms: int = 5000
 
     @field_validator("whitelist", mode="before")

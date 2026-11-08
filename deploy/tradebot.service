@@ -1,0 +1,17 @@
+[Unit]
+Description=tradebot web app
+After=network-online.target tailscaled.service
+Wants=network-online.target
+
+[Service]
+User=ubuntu
+WorkingDirectory=/home/ubuntu/tradingHelper
+EnvironmentFile=/home/ubuntu/tradingHelper/.env
+ExecStart=/home/ubuntu/tradingHelper/.venv/bin/uvicorn tradebot.api:app --host 127.0.0.1 --port 8000
+Restart=on-failure
+NoNewPrivileges=true
+ProtectSystem=strict
+ReadWritePaths=/home/ubuntu/tradingHelper
+
+[Install]
+WantedBy=multi-user.target

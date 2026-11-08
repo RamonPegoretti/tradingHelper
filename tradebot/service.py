@@ -62,6 +62,8 @@ def money(x: Decimal | float) -> str:
         return s[:-3] if s.endswith(".00") else s
     if x == x.to_integral_value():
         return f"{x:.0f}"
+    if abs(x) >= 1:
+        return f"{x:.2f}"
     return fmt(x.quantize(Decimal("0.00000001")))
 
 
@@ -364,6 +366,9 @@ class TradeService:
 
 
 def build_service(settings: Settings) -> TradeService:
+    if settings.env == "demo":
+        from .exchange.demo import DemoFutures, DemoSpot
+        return TradeService(settings, DemoFutures(), DemoSpot(), TradeLog(settings.db_path))
     futures = FuturesClient(settings.futures_url, settings.futures_api_key,
                             settings.futures_api_secret, settings.recv_window_ms)
     spot = SpotClient(settings.spot_url, settings.spot_api_key, settings.spot_api_secret,
