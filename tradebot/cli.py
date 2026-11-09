@@ -27,6 +27,10 @@ def handle(svc: TradeService, text: str, ask=input) -> Reply:
 
 def main(argv: list[str] | None = None) -> int:
     argv = sys.argv[1:] if argv is None else argv
+    # Summaries use ≈ · ↔ ⚠️; a Windows console or redirected output defaults to cp1252.
+    for stream in (sys.stdout, sys.stderr):
+        if hasattr(stream, "reconfigure"):
+            stream.reconfigure(encoding="utf-8", errors="replace")
     settings = get_settings()
     svc = build_service(settings)
     print(f"[tradebot · {settings.env.upper()} · whitelist {', '.join(settings.whitelist)}]")

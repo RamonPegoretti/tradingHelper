@@ -10,6 +10,7 @@ import hashlib
 import hmac
 import secrets
 import struct
+import threading
 import time
 from dataclasses import dataclass, field
 from typing import Callable
@@ -77,6 +78,7 @@ class AuthManager:
     _sessions: dict[str, float] = field(default_factory=dict)
     _failures: list[float] = field(default_factory=list)
     _used_codes: dict[str, float] = field(default_factory=dict)
+    _lock: threading.Lock = field(default_factory=threading.Lock, repr=False)
 
     @property
     def configured(self) -> bool:
@@ -89,6 +91,12 @@ class AuthManager:
 
     def login(self, password: str, code: str) -> str | None:
         """Returns a session token, or None. Locks out after repeated failures."""
+        # Same form as verify_totp, so "123 456" can't replay a used "123456".
+        code = code.strip().replace(" ", "")
+        with self._lock:  # requests run in a thread pool; keep check + mark atomic
+            return self._login(password, code)
+
+    def _login(self, password: str, code: str) -> str | None:
         if not self.configured or self.locked():
             return None
         now = self.clock()
