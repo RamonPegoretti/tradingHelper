@@ -214,7 +214,35 @@ class TradeService:
             parts.append(f"SL {money(o.sl)}")
         parts.append(f"est. liquidation ≈ {money(liq)}")
         parts.append(self.s.margin_type.lower())
-        return Plan(o, text, self._tag(" · ".join(parts)), steps)
+        summary = " · ".join(parts)
+        effect = self._position_effect(o, qty)
+        if effect:
+            summary = f"{effect}\n{summary}"
+        return Plan(o, text, self._tag(summary), steps)
+
+    def _position_effect(self, o: FuturesOrder, qty: Decimal) -> str | None:
+        """One-way mode keeps one position per coin: say when this order changes an open one."""
+        cur = next((p for p in self.futures.positions() if p["symbol"] == o.symbol), None)
+        if cur is None:
+            return None
+        held = Decimal(cur["positionAmt"])
+        if held == 0:
+            return None
+        held_side = "LONG" if held > 0 else "SHORT"
+        size = f"{held_side} {fmt(abs(held))} {o.coin}"
+        when = " when the limit fills" if o.price else ""
+        if (held > 0) == (o.side == "long"):
+            return f"ℹ️ Adds to your open {size}{when}."
+        orders = [x for x in self.futures.open_orders(o.symbol)]
+        leftover = (f" Its {len(orders)} open TP/SL/limit order{'s' if len(orders) > 1 else ''} "
+                    "stay open; use Close to remove them.") if orders else ""
+        if qty < abs(held):
+            return f"⚠️ This REDUCES your open {size} by {fmt(qty)}{when}, it doesn't open a new {o.side}."
+        if qty == abs(held):
+            return (f"⚠️ This CLOSES your open {size}{when} "
+                    f"(one position per coin), it doesn't open a {o.side}.{leftover}")
+        return (f"⚠️ This CLOSES your open {size} and opens a {o.side.upper()} of "
+                f"{fmt(qty - abs(held))} {o.coin}{when}.{leftover}")
 
     def _liq_estimate(self, entry: Decimal, lev: int, long: bool) -> Decimal:
         """Isolated-margin approximation; Binance's real number depends on tiers and fees."""

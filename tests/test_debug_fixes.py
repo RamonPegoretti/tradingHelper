@@ -163,3 +163,32 @@ def test_log_limit_is_clamped(tmp_path):
         assert len(c.get("/api/log?limit=-1").json()) == 1
     finally:
         api.app.dependency_overrides.clear()
+
+
+# ---- warn when an order changes an open position (one-way mode) -------------
+
+def _btc_long(f, amt="0.007"):
+    f.pos = [{"symbol": "BTCUSDT", "positionAmt": amt, "entryPrice": "67000",
+              "markPrice": "67100", "unRealizedProfit": "0.7", "leverage": "5"}]
+
+
+def test_short_against_open_long_warns_it_closes(env):
+    svc, f, _ = env
+    _btc_long(f)
+    f.orders = [{"symbol": "BTCUSDT", "side": "SELL", "type": "STOP_MARKET", "origQty": "0",
+                 "price": "0", "stopPrice": "66000", "orderId": 3}]
+    r = svc.preview("short btc 100 5x")       # 0.007 BTC, same size as the long
+    assert r.status == "confirm"
+    assert r.message.startswith("⚠️ This CLOSES your open LONG 0.007 BTC")
+    assert "1 open TP/SL/limit order stay open" in r.message
+
+
+def test_position_effect_reduce_flip_add(env):
+    svc, f, _ = env
+    _btc_long(f, "0.014")
+    assert "REDUCES your open LONG 0.014 BTC by 0.007" in svc.preview("short btc 100 5x").message
+    _btc_long(f, "0.003")
+    assert "opens a SHORT of 0.004 BTC" in svc.preview("short btc 100 5x").message
+    assert svc.preview("long btc 100 5x").message.startswith("ℹ️ Adds to your open LONG")
+    f.pos = []
+    assert "⚠️" not in svc.preview("short btc 100 5x").message
