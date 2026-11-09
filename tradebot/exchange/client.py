@@ -96,7 +96,13 @@ class _BaseClient:
         else:
             query = urlencode(params)
         url = f"{self.base_url}{path}" + (f"?{query}" if query else "")
-        resp = self.http.request(method, url, headers=headers)
+        try:
+            resp = self.http.request(method, url, headers=headers)
+        except httpx.HTTPError as e:
+            # Timeouts / DNS / connection resets: report them like any exchange error
+            # instead of a bare HTTP 500. A timed-out order may still have gone through.
+            raise BinanceError(0, None, f"network error talking to Binance ({type(e).__name__}: {e}); "
+                                        "if this was an order, check positions/orders before retrying")
         try:
             data = resp.json()
         except ValueError:

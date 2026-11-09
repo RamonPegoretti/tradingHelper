@@ -62,7 +62,9 @@ def _is_num(tok: str) -> bool:
 
 def _normalise(text: str) -> list[str]:
     t = text.strip().lower()
-    t = re.sub(r"(?<=\d),(?=\d{3}\b)", "", t)          # 72,000 -> 72000
+    t = t.replace("\u2019", "'")                        # typographic apostrophe
+    t = re.sub(r"(?<=\d)[,'](?=\d{3}\b)", "", t)       # 72,000 / 72'000 -> 72000
+    t = re.sub(r"(?<=\d),(?=\d)", ".", t)               # 12,5 -> 12.5 (decimal comma)
     t = t.replace("@", " at ")
     t = re.sub(r"\$\s*(\d)", r"\1", t)                   # $100 -> 100
     t = re.sub(r"(\d)(usdt|usd)\b", r"\1 \2", t)         # 100usdt -> 100 usdt

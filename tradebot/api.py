@@ -169,4 +169,4 @@ def prices(svc: TradeService = Depends(get_service)) -> dict:
 
 @app.get("/api/log", dependencies=[Depends(require_login)])
 def log(limit: int = 50, svc: TradeService = Depends(get_service)) -> list[dict]:
-    return svc.log.recent(min(limit, 500))
+    return svc.log.recent(max(1, min(limit, 500)))

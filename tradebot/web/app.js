@@ -9,9 +9,30 @@ async function api(path, body) {
     headers: { "Content-Type": "application/json", "X-Tradebot": "1" },
     body: JSON.stringify(body),
   };
-  const res = await fetch(path, opts);
+  let res;
+  try {
+    res = await fetch(path, opts);
+  } catch (e) {
+    return { status: "error", message: "Can't reach the bot (is the server running?)." };
+  }
   if (res.status === 401) { location.href = "/login"; throw new Error("logged out"); }
-  return res.json();
+  const data = await res.json().catch(() => null);
+  if (!res.ok || data === null) {
+    // 403/429/500 etc.: show it instead of failing silently.
+    const detail = data && data.detail ? data.detail : `HTTP ${res.status}`;
+    return { status: "error", message: `Server error: ${detail}` };
+  }
+  return data;
+}
+
+// "12,5" -> 12.5, "72'000" / "72 000" / "72,000" -> 72000 (Swiss / European keypads).
+function normNum(raw) {
+  let t = String(raw).trim().replace(/[\s'\u2019]/g, "");
+  if (!t) return "";
+  if (t.includes(",") && t.includes(".")) t = t.replace(/,/g, "");
+  else if (/^\d{1,3}(,\d{3})+$/.test(t)) t = t.replace(/,/g, "");
+  else t = t.replace(",", ".");
+  return t;
 }
 
 function el(tag, attrs = {}, text) {
@@ -33,7 +54,13 @@ function chips(container, values, current, label, onPick, custom) {
   if (custom) {
     const inp = el("input", { inputmode: "decimal", placeholder: "other", class: "other" });
     if (!values.includes(current) && current) inp.value = current;
-    inp.oninput = () => { const n = parseFloat(inp.value); if (n > 0) onPick(n, true); };
+    inp.oninput = () => {
+      const n = Number(normNum(inp.value));
+      if (n > 0) {
+        onPick(n, true);
+        for (const c of container.querySelectorAll("button")) c.classList.remove("on");
+      }
+    };
     container.appendChild(inp);
   }
 }
@@ -116,7 +143,10 @@ $("no").onclick = cancel;
 document.addEventListener("keydown", (e) => {
   if (!state.pending) return;
   if (e.key === "Escape") { e.preventDefault(); cancel(); $("text").focus(); }
-  if (e.key === "Enter" && document.activeElement !== $("text")) { e.preventDefault(); place(); }
+  // Enter places only when nothing else has focus (or "Place order" does). Enter on
+  // Cancel, a position's Close button or the price/TP/SL boxes must not place the order.
+  const a = document.activeElement;
+  if (e.key === "Enter" && (a === $("yes") || a === document.body || a === null)) { e.preventDefault(); place(); }
 });
 
 // ---- text box: Enter previews, Enter again places ---------------------------
@@ -143,7 +173,7 @@ function panelText(side) {
   const verb = fut ? side : side === "long" ? "buy" : "sell";
   let t = `${verb} ${state.coin} ${state.amount}`;
   if (fut) t += ` ${state.lev}x`;
-  const price = $("price").value.trim(), tp = $("tp").value.trim(), sl = $("sl").value.trim();
+  const price = normNum($("price").value), tp = normNum($("tp").value), sl = normNum($("sl").value);
   if (price) t += ` at ${price}`;
   if (fut && tp) t += ` tp ${tp}`;
   if (fut && sl) t += ` sl ${sl}`;
@@ -171,6 +201,7 @@ async function refreshPositions() {
   const r = await api("/api/positions");
   const box = $("positions");
   box.replaceChildren();
+  if (r.status === "error") { box.textContent = r.message; return; }
   if (!Array.isArray(r.data) || !r.data.length) { box.textContent = "No open positions."; return; }
   const table = el("table");
   table.appendChild(el("tr")).append(...["", "Size", "Entry", "Mark", "PnL", ""].map((h) => el("th", {}, h)));

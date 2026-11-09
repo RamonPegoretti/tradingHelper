@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import sqlite3
+import threading
 import time
 from typing import Any
 
@@ -23,11 +24,17 @@ CREATE TABLE IF NOT EXISTS trade_log (
 class TradeLog:
     def __init__(self, path: str):
         self.conn = sqlite3.connect(path, check_same_thread=False)
+        # The web app calls this from several worker threads; one connection, one lock.
+        self.lock = threading.Lock()
         self.conn.execute(SCHEMA)
         self.conn.commit()
 
     def add(self, *, env: str, text: str | None, command: Any, summary: str,
             status: str, detail: Any = None) -> int:
+        with self.lock:
+            return self._insert(env, text, command, summary, status, detail)
+
+    def _insert(self, env, text, command, summary, status, detail) -> int:
         cur = self.conn.execute(
             "INSERT INTO trade_log (ts, env, text, command, summary, status, detail) "
             "VALUES (?, ?, ?, ?, ?, ?, ?)",
@@ -38,8 +45,9 @@ class TradeLog:
         return cur.lastrowid
 
     def recent(self, limit: int = 50) -> list[dict]:
-        rows = self.conn.execute(
-            "SELECT id, ts, env, text, summary, status, detail FROM trade_log "
-            "ORDER BY id DESC LIMIT ?", (limit,)).fetchall()
+        with self.lock:
+            rows = self.conn.execute(
+                "SELECT id, ts, env, text, summary, status, detail FROM trade_log "
+                "ORDER BY id DESC LIMIT ?", (limit,)).fetchall()
         keys = ["id", "ts", "env", "text", "summary", "status", "detail"]
         return [dict(zip(keys, r)) for r in rows]

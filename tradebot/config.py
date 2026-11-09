@@ -21,7 +21,10 @@ BASE_URLS = {
 
 
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_prefix="TRADEBOT_", env_file=".env", extra="ignore")
+    model_config = SettingsConfigDict(env_prefix="TRADEBOT_", env_file=".env",
+                                      # utf-8-sig: a .env saved by Windows Notepad starts with a BOM,
+                                      # which would otherwise hide the first line (TRADEBOT_ENV).
+                                      env_file_encoding="utf-8-sig", extra="ignore")
 
     # "demo" = fake in-memory exchange, no keys needed, nothing sent anywhere.
     env: Literal["demo", "testnet", "live"] = "testnet"

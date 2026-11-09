@@ -21,6 +21,8 @@ from .storage import TradeLog
 
 # Slack so a 100 USDT margin isn't rejected for missing a few cents of fees.
 FEE_BUFFER = Decimal("1.002")
+# "sell btc 50" sells the whole holding if it's worth at least 97% of 50.
+SELL_ALL_SLACK = Decimal("0.97")
 
 
 class ValidationError(ValueError):
@@ -65,6 +67,16 @@ def money(x: Decimal | float) -> str:
     if abs(x) >= 1:
         return f"{x:.2f}"
     return fmt(x.quantize(Decimal("0.00000001")))
+
+
+def _nonzero(x: Any) -> str | None:
+    """Binance sends "0" / "0.00000" for fields that don't apply; treat those as missing."""
+    if x in (None, ""):
+        return None
+    try:
+        return str(x) if Decimal(str(x)) != 0 else None
+    except ArithmeticError:
+        return None
 
 
 class TradeService:
@@ -225,13 +237,30 @@ class TradeService:
             have = balances.get("USDT", Decimal(0))
             if have < o.amount:
                 raise ValidationError(f"Not enough spot USDT: need {money(o.amount)}, have {money(have)}.")
-        else:
-            have = balances.get(o.coin, Decimal(0)) * ref
+        sell_all_qty = None
+        if o.side == "sell":
+            held = balances.get(o.coin, Decimal(0))
+            have = held * ref
             if have < o.amount:
-                raise ValidationError(f"Not enough {o.coin} on spot: worth ≈ {money(have)} USDT, "
-                                      f"selling {money(o.amount)}.")
+                # Bought 50 USDT, price dipped a little, "sell 50" should sell it all, not fail.
+                if have >= o.amount * SELL_ALL_SLACK and rules.round_qty(held) > 0:
+                    sell_all_qty = rules.round_qty(held)
+                else:
+                    raise ValidationError(f"Not enough {o.coin} on spot: worth ≈ {money(have)} USDT, "
+                                          f"selling {money(o.amount)}.")
         side = o.side.upper()
-        if o.price:
+        if sell_all_qty is not None:
+            if sell_all_qty * ref < rules.min_notional:
+                raise ValidationError(f"Your {o.coin} is worth ≈ {money(sell_all_qty * ref)} USDT, "
+                                      f"below Binance's minimum of {money(rules.min_notional)} USDT.")
+            params = {"symbol": o.symbol, "side": side, "quantity": fmt(sell_all_qty)}
+            if o.price:
+                params |= {"type": "LIMIT", "timeInForce": "GTC", "price": fmt(ref)}
+                what = f"all {fmt(sell_all_qty)} {o.coin} limit {money(ref)}"
+            else:
+                params |= {"type": "MARKET", "newOrderRespType": "FULL"}
+                what = f"all {fmt(sell_all_qty)} {o.coin} (≈ {money(sell_all_qty * last)} USDT) at market ≈ {money(last)}"
+        elif o.price:
             qty = rules.round_qty(o.amount / ref)
             if qty < rules.min_qty or qty <= 0:
                 raise ValidationError(f"Too small for {o.coin}'s minimum quantity {fmt(rules.min_qty)}.")
@@ -242,7 +271,8 @@ class TradeService:
             params = {"symbol": o.symbol, "side": side, "type": "MARKET",
                       "quoteOrderQty": fmt(o.amount), "newOrderRespType": "FULL"}
             what = f"≈ {fmt(rules.round_qty(o.amount / last))} {o.coin} at market ≈ {money(last)}"
-        summary = f"SPOT {side} {o.symbol} · {money(o.amount)} USDT · {what} · no leverage"
+        amount_txt = "" if sell_all_qty is not None else f"{money(o.amount)} USDT · "
+        summary = f"SPOT {side} {o.symbol} · {amount_txt}{what} · no leverage"
         return Plan(o, text, self._tag(summary), [("spot.new_order", params)])
 
     def _plan_close(self, o: ClosePosition, text: str) -> Plan:
@@ -250,9 +280,19 @@ class TradeService:
             self._check_coin(o.coin)
         positions = [p for p in self.futures.positions()
                      if o.symbol is None or p["symbol"] == o.symbol]
-        if not positions:
-            raise ValidationError(f"No open {o.coin + ' ' if o.coin else ''}futures position.")
+        # Symbols with open futures orders but no position (e.g. an unfilled limit entry,
+        # or a TP/SL left behind): "close" cancels those too, else they can't be removed.
+        held = {p["symbol"] for p in positions}
+        orphan: dict[str, int] = {}
+        for order in self.futures.open_orders(o.symbol):
+            if order["symbol"] not in held:
+                orphan[order["symbol"]] = orphan.get(order["symbol"], 0) + 1
+        if not positions and not orphan:
+            raise ValidationError(f"No open {o.coin + ' ' if o.coin else ''}futures position or order.")
         steps, lines = [], []
+        for sym, n in orphan.items():
+            steps.append(("futures.cancel_all", {"symbol": sym}))
+            lines.append(f"{sym} cancel {n} open order{'s' if n > 1 else ''} (no position)")
         for p in positions:
             amt = Decimal(p["positionAmt"])
             side = "SELL" if amt > 0 else "BUY"
@@ -263,8 +303,9 @@ class TradeService:
             }))
             pnl = Decimal(p.get("unRealizedProfit", "0"))
             lines.append(f"{p['symbol']} {'LONG' if amt > 0 else 'SHORT'} {fmt(abs(amt))} "
-                         f"(uPnL {'+' if pnl >= 0 else ''}{money(pnl)} USDT)")
-        summary = "CLOSE at market (and cancel its open orders): " + "; ".join(lines)
+                         f"(uPnL {pnl:+,.2f} USDT)")
+        head = "CLOSE at market (and cancel its open orders): " if positions else "CANCEL orders: "
+        summary = head + "; ".join(lines)
         return Plan(o, text, self._tag(summary), steps)
 
     def _tag(self, summary: str) -> str:
@@ -321,10 +362,21 @@ class TradeService:
             if (not avg or Decimal(avg) == 0) and res.get("fills"):
                 qty = sum(Decimal(f["qty"]) for f in res["fills"])
                 avg = fmt(sum(Decimal(f["price"]) * Decimal(f["qty"]) for f in res["fills"]) / qty)
-            price = avg if avg and Decimal(avg) != 0 else (res.get("price") or res.get("stopPrice"))
+            if avg and Decimal(avg) != 0:
+                price = f"price {avg}"
+            elif _nonzero(res.get("stopPrice")) or _nonzero(p.get("stopPrice")):
+                price = f"trigger {_nonzero(res.get('stopPrice')) or p['stopPrice']}"
+            else:
+                price = f"price {_nonzero(res.get('price')) or p.get('price', '-')}"
+            if p.get("closePosition") == "true":
+                qty = "whole position"
+            else:
+                qty = (_nonzero(res.get("executedQty")) or _nonzero(res.get("origQty"))
+                       or p.get("quantity") or "-")
             lines.append(f"{res.get('symbol')} {res.get('side')} {res.get('type') or p['type']} "
-                         f"{res.get('status', '')} · qty {res.get('executedQty') or res.get('origQty') or '-'} "
-                         f"· price {price} · id {res.get('orderId')}")
+                         f"{res.get('status', '')} · qty {qty} · {price} · id {res.get('orderId')}")
+        if not lines and any(r["step"] == "futures.cancel_all" for r in results):
+            return "Open orders cancelled."
         return "\n".join(lines) or "Done."
 
     # ---- read-only ----------------------------------------------------------
@@ -347,11 +399,13 @@ class TradeService:
             lines = []
             for p in pos:
                 amt = Decimal(p["positionAmt"])
+                pnl = Decimal(p["unRealizedProfit"])
+                liq = _nonzero(p.get("liquidationPrice"))
                 lines.append(
                     f"{p['symbol']} {'LONG' if amt > 0 else 'SHORT'} {fmt(abs(amt))} · "
                     f"entry {money(Decimal(p['entryPrice']))} · mark {money(Decimal(p['markPrice']))} · "
-                    f"{p.get('leverage', '?')}x · uPnL {money(Decimal(p['unRealizedProfit']))} USDT · "
-                    f"liq {money(Decimal(p.get('liquidationPrice', '0')))}")
+                    f"{p.get('leverage', '?')}x · uPnL {pnl:+,.2f} USDT"
+                    + (f" · liq {money(Decimal(liq))}" if liq else ""))
             return "\n".join(lines), pos
         if what == "orders":
             fut = self.futures.open_orders()
@@ -359,9 +413,18 @@ class TradeService:
             rows = [("futures", o) for o in fut] + [("spot", o) for o in spot]
             if not rows:
                 return "No open orders.", []
-            lines = [f"[{w}] {o['symbol']} {o['side']} {o['type']} qty {o.get('origQty')} "
-                     f"price {o.get('price')} stop {o.get('stopPrice', '-')} · id {o['orderId']}"
-                     for w, o in rows]
+            lines = []
+            for w, o in rows:
+                parts = [f"[{w}] {o['symbol']} {o['side']} {o['type']}"]
+                if o.get("closePosition") in (True, "true") or not _nonzero(o.get("origQty")):
+                    parts.append("whole position")
+                else:
+                    parts.append(f"qty {fmt(Decimal(o['origQty']))}")
+                if _nonzero(o.get("price")):
+                    parts.append(f"price {money(Decimal(o['price']))}")
+                if _nonzero(o.get("stopPrice")):
+                    parts.append(f"trigger {money(Decimal(o['stopPrice']))}")
+                lines.append(" ".join(parts) + f" · id {o['orderId']}")
             return "\n".join(lines), {"futures": fut, "spot": spot}
         fut = self.futures.balance("USDT")
         spot = self.spot.balances()

@@ -15,6 +15,7 @@ class FakeFutures:
         self.calls = []
         self.fail_on = None  # order type that raises
         self.pos = []
+        self.orders = []
 
     def rules(self, symbol):
         if symbol not in self.mark:
@@ -47,7 +48,7 @@ class FakeFutures:
         return self.pos
 
     def open_orders(self, symbol=None):
-        return []
+        return [o for o in self.orders if symbol is None or o["symbol"] == symbol]
 
     def cancel_all(self, symbol):
         self.calls.append(("cancel_all", symbol))

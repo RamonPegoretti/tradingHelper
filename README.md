@@ -37,6 +37,25 @@ In `.env` set `TRADEBOT_ENV=demo`, then:
 uvicorn tradebot.api:app --host 127.0.0.1 --port 8000
 ```
 
+### On Windows (PowerShell)
+
+```powershell
+git clone https://github.com/RamonPegoretti/tradingHelper; cd tradingHelper
+py -3.12 -m venv .venv                 # Python 3.11+; plain `python` works too if it's 3.11+
+.\.venv\Scripts\Activate.ps1           # if blocked: Set-ExecutionPolicy -Scope CurrentUser RemoteSigned
+pip install -e ".[dev]"
+Copy-Item .env.example .env            # cmd.exe: copy .env.example .env
+python -m tradebot.auth                # run it in PowerShell or cmd, not Git Bash (the password prompt hangs there)
+notepad .env                           # paste the two lines, set TRADEBOT_ENV=demo, save
+uvicorn tradebot.api:app --host 127.0.0.1 --port 8000
+```
+
+- Use `127.0.0.1`, not `0.0.0.0`: the bot should only be reachable from your own machine.
+- Notepad's UTF-8 BOM is fine; the app reads `.env` either way.
+- Don't put the password hash in a PowerShell `$env:` variable with double quotes: PowerShell
+  eats the `$` parts. Keep it in `.env`.
+- Run `uvicorn` from the repo folder; that's where it looks for `.env` and writes `tradebot.db`.
+
 Open <http://127.0.0.1:8000>, log in with the password + the 6-digit code.
 
 ## Testnet
@@ -101,10 +120,11 @@ Confirm within 60s? [y/N]
 | `long sol 30 3x at 140` (or `@140`) | limit order |
 | `buy btc 50` / `sell btc 50` | spot market buy/sell of 50 USDT worth, no leverage |
 | `buy btc 50 at 60000` | spot limit |
-| `close btc` / `close all` | cancel that symbol's open orders, then reduce-only market close |
+| `close btc` / `close all` | cancel that symbol's open orders, then reduce-only market close (with no position, just cancels its open futures orders, e.g. an unfilled limit) |
 | `positions` / `orders` / `balance` | read-only, no confirmation |
 
-Amounts are USDT only (`100`, `100 usdt`, `$100` are the same). Prices accept `72k` and `72,000`.
+Amounts are USDT only (`100`, `100 usdt`, `$100` are the same). Prices accept `72k`, `72,000` and `72'000`;
+`12,5` is read as 12.5. `sell btc 50` sells your whole BTC if it's worth a little under 50 (≥ 97%).
 Missing leverage, amount or coin → the bot asks instead of guessing.
 
 ## Safety built in

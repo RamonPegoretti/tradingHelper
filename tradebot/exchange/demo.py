@@ -74,12 +74,29 @@ class DemoFutures:
         qty = Decimal(p["quantity"]) * (1 if side == "BUY" else -1)
         price = _price(sym)
         cur = self.pos.get(sym)
-        amt = (Decimal(cur["positionAmt"]) if cur else Decimal(0)) + qty
+        old = Decimal(cur["positionAmt"]) if cur else Decimal(0)
+        old_entry = Decimal(cur["entryPrice"]) if cur else Decimal(0)
+        if p.get("reduceOnly") == "true" and (old == 0 or (old > 0) == (qty > 0)):
+            raise BinanceError(400, -2022, "ReduceOnly Order is rejected.")
+        if p.get("reduceOnly") == "true" and abs(qty) > abs(old):
+            qty = -old
+        amt = old + qty
+        if old and (old > 0) != (qty > 0):
+            # Reducing (or flipping): realise PnL on the closed part into the wallet.
+            closed = min(abs(qty), abs(old))
+            sign = 1 if old > 0 else -1
+            self.wallet += ((price - old_entry) * closed * sign).quantize(Decimal("0.01"))
         if amt == 0:
             self.pos.pop(sym, None)
         else:
-            entry = cur["entryPrice"] if cur and (Decimal(cur["positionAmt"]) > 0) == (amt > 0) else str(price)
-            self.pos[sym] = {"symbol": sym, "positionAmt": str(amt), "entryPrice": entry,
+            if old and (old > 0) == (amt > 0) and (old > 0) == (qty > 0):
+                # Adding to the same side: weighted average entry, like Binance.
+                entry = ((old_entry * abs(old) + price * abs(qty)) / abs(amt)).quantize(Decimal("0.0001"))
+            elif old and (old > 0) == (amt > 0):
+                entry = old_entry           # partial close keeps the entry
+            else:
+                entry = price               # new position or flipped side
+            self.pos[sym] = {"symbol": sym, "positionAmt": str(amt), "entryPrice": str(entry),
                              "leverage": str(self.lev.get(sym, 1))}
         return {"symbol": sym, "side": side, "type": typ, "status": "FILLED", "orderId": oid,
                 "executedQty": p["quantity"], "avgPrice": str(price)}
@@ -133,8 +150,12 @@ class DemoSpot:
             self.o.open.append(order)
             return order
         price = _price(sym)
-        quote = Decimal(p["quoteOrderQty"])
-        qty = (quote / price).quantize(Decimal("0.00001"))
+        if "quoteOrderQty" in p:
+            quote = Decimal(p["quoteOrderQty"])
+            qty = (quote / price).quantize(Decimal("0.00001"))
+        else:
+            qty = Decimal(p["quantity"])
+            quote = (qty * price).quantize(Decimal("0.01"))
         base = sym[:-4]
         sign = 1 if side == "BUY" else -1
         self.bal["USDT"] = self.bal.get("USDT", Decimal(0)) - sign * quote
