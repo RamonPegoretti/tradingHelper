@@ -112,3 +112,17 @@ def test_demo_spot_and_close(ctx):
         assert client.post("/api/confirm", json={"token": r["token"]}, headers=H).json()["status"] == "done"
     assert client.get("/api/positions").json()["message"] == "No open futures positions."
     assert "BTC" in client.get("/api/balance").json()["message"]
+
+
+def test_prices_for_panel(ctx):
+    client, auth, secret, clock = ctx
+    login(client, secret, clock)
+    prices = client.get("/api/prices").json()
+    assert set(prices) == {"BTC", "ETH", "SOL"} and float(prices["BTC"]) > 0
+
+
+def test_query_data_is_returned_as_data(ctx):
+    client, auth, secret, clock = ctx
+    login(client, secret, clock)
+    bal = client.get("/api/balance").json()
+    assert "token" not in bal and bal["data"]["futures"]["asset"] == "USDT"

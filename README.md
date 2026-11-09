@@ -67,8 +67,11 @@ Never use `tailscale funnel` for this; that would put it on the public internet.
 
 ### Web app
 
-Type a command, read the summary, press **Confirm** within 60 s (or Cancel). Positions,
-open orders and balances refresh every 15 s on the right. The header shows DEMO / TESTNET / LIVE.
+Pick Futures or Spot, tap a coin, an amount and a leverage, then **Long** or **Short**
+(Buy/Sell on spot). Limit price, TP and SL are optional under "Limit price / TP / SL".
+A summary appears under the buttons: tap **Place order** within 60 s, or Cancel.
+Each open position has its own **Close** button. Prices, positions and balance refresh every 10 s.
+Typing still works in the small box at the bottom (Enter previews, Enter again places, Esc cancels).
 
 ### Command line
 

@@ -10,34 +10,63 @@
 <header>
   <strong>tradebot</strong>
   <span id="env" class="badge"></span>
-  <span id="limits" class="muted"></span>
+  <span id="bal" class="muted"></span>
   <button id="logout" class="link">Log out</button>
 </header>
-<main>
-  <section class="chat">
-    <div id="log" aria-live="polite"></div>
-    <form id="cmd">
-      <input id="text" placeholder="long btc 100 5x tp 72k sl 66k" autocomplete="off" autofocus>
-      <button type="submit">Send</button>
-    </form>
-    <p class="muted hint">Examples: <code>long eth 50 5x at 3200</code> · <code>buy btc 50</code> · <code>close btc</code> · <code>positions</code></p>
-  </section>
-  <aside>
-    <div class="panel"><h2>Positions <button class="link" data-refresh>↻</button></h2><pre id="positions">…</pre></div>
-    <div class="panel"><h2>Open orders</h2><pre id="orders">…</pre></div>
-    <div class="panel"><h2>Balance</h2><pre id="balance">…</pre></div>
-  </aside>
-</main>
-<template id="confirm-tpl">
-  <div class="msg confirm">
-    <div class="summary"></div>
-    <div class="actions">
-      <button class="yes">Confirm</button>
-      <button class="no secondary">Cancel</button>
-      <span class="timer muted"></span>
+
+<main class="trade">
+  <section class="panel order">
+    <div class="seg" id="market-kind">
+      <button type="button" data-kind="futures" class="on">Futures</button>
+      <button type="button" data-kind="spot">Spot</button>
     </div>
-  </div>
-</template>
+
+    <div class="coins" id="coins"></div>
+
+    <label class="row">Amount <small class="muted" id="amount-hint">USDT margin</small></label>
+    <div class="chips" id="amounts"></div>
+
+    <div id="lev-row">
+      <label class="row">Leverage</label>
+      <div class="chips" id="levs"></div>
+    </div>
+
+    <details id="more">
+      <summary>Limit price / TP / SL</summary>
+      <div class="grid3">
+        <label>Limit at <input id="price" inputmode="decimal" placeholder="market"></label>
+        <label class="fut">TP <input id="tp" inputmode="decimal" placeholder="—"></label>
+        <label class="fut">SL <input id="sl" inputmode="decimal" placeholder="—"></label>
+      </div>
+    </details>
+
+    <div class="sides">
+      <button type="button" id="long" class="long">Long</button>
+      <button type="button" id="short" class="short">Short</button>
+    </div>
+    <!-- One confirm bar for both the panel and the text box -->
+    <div id="confirm" class="confirm" hidden>
+      <div id="summary" class="summary"></div>
+      <div class="actions">
+        <button id="yes">Place order <kbd>↵</kbd></button>
+        <button id="no" class="secondary">Cancel <kbd>Esc</kbd></button>
+        <span id="timer" class="muted"></span>
+      </div>
+    </div>
+    <div id="result" class="result" hidden></div>
+
+    <form id="quick" class="quick">
+      <input id="text" placeholder="or type: long btc 100 5x tp 72k" autocomplete="off" spellcheck="false">
+    </form>
+  </section>
+
+  <section class="panel">
+    <h2>Positions <button class="link" id="refresh" title="Refresh">↻</button></h2>
+    <div id="positions" class="muted">…</div>
+    <h2 class="sub">Open orders</h2>
+    <pre id="orders" class="muted">…</pre>
+  </section>
+</main>
 <script src="/static/app.js"></script>
 </body>
 </html>
