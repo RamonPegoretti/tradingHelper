@@ -162,6 +162,11 @@ def balance(svc: TradeService = Depends(get_service)) -> dict:
     return svc.preview("balance").to_dict()
 
 
+@app.get("/api/prices", dependencies=[Depends(require_login)])
+def prices(svc: TradeService = Depends(get_service)) -> dict:
+    return svc.prices()
+
+
 @app.get("/api/log", dependencies=[Depends(require_login)])
 def log(limit: int = 50, svc: TradeService = Depends(get_service)) -> list[dict]:
     return svc.log.recent(min(limit, 500))

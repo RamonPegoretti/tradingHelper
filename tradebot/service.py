@@ -92,7 +92,8 @@ class TradeService:
         """Also the entry point for already-structured commands (Claude, Ollama)."""
         try:
             if isinstance(cmd, Query):
-                return Reply("info", *self._query(cmd.what))
+                message, data = self._query(cmd.what)
+                return Reply("info", message, data=data)
             if isinstance(cmd, FuturesOrder):
                 plan = self._plan_futures(cmd, text)
             elif isinstance(cmd, SpotOrder):
@@ -327,6 +328,16 @@ class TradeService:
         return "\n".join(lines) or "Done."
 
     # ---- read-only ----------------------------------------------------------
+
+    def prices(self) -> dict[str, str]:
+        """Futures mark price for each whitelisted coin (for the order panel)."""
+        out = {}
+        for coin in self.s.whitelist:
+            try:
+                out[coin] = str(self.futures.mark_price(f"{coin}USDT"))
+            except (BinanceError, KeyError):
+                out[coin] = None
+        return out
 
     def _query(self, what: str) -> tuple[str, Any]:
         if what == "positions":
