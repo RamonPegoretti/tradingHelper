@@ -150,3 +150,4 @@ def test_money():
     assert money(Decimal("67250.1")) == "67,250.10"
     assert money(Decimal("100")) == "100"
     assert money(Decimal("0.5")) == "0.5"
+    assert money(Decimal("470.6790564")) == "470.68"

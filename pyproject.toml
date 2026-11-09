@@ -20,5 +20,8 @@ tradebot = "tradebot.cli:main"
 [tool.setuptools.packages.find]
 include = ["tradebot*"]
 
+[tool.setuptools.package-data]
+tradebot = ["web/*"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]

@@ -1,0 +1,19 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>tradebot · login</title>
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body class="login">
+<form id="login" class="card" autocomplete="on">
+  <h1>tradebot</h1>
+  <label>Password <input id="password" type="password" autocomplete="current-password" required autofocus></label>
+  <label>2FA code <input id="code" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9 ]{6,7}" required></label>
+  <button type="submit">Log in</button>
+  <p id="err" class="err" role="alert"></p>
+</form>
+<script src="/static/login.js"></script>
+</body>
+</html>

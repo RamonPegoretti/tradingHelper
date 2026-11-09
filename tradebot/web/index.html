@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>tradebot</title>
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<header>
+  <strong>tradebot</strong>
+  <span id="env" class="badge"></span>
+  <span id="limits" class="muted"></span>
+  <button id="logout" class="link">Log out</button>
+</header>
+<main>
+  <section class="chat">
+    <div id="log" aria-live="polite"></div>
+    <form id="cmd">
+      <input id="text" placeholder="long btc 100 5x tp 72k sl 66k" autocomplete="off" autofocus>
+      <button type="submit">Send</button>
+    </form>
+    <p class="muted hint">Examples: <code>long eth 50 5x at 3200</code> · <code>buy btc 50</code> · <code>close btc</code> · <code>positions</code></p>
+  </section>
+  <aside>
+    <div class="panel"><h2>Positions <button class="link" data-refresh>↻</button></h2><pre id="positions">…</pre></div>
+    <div class="panel"><h2>Open orders</h2><pre id="orders">…</pre></div>
+    <div class="panel"><h2>Balance</h2><pre id="balance">…</pre></div>
+  </aside>
+</main>
+<template id="confirm-tpl">
+  <div class="msg confirm">
+    <div class="summary"></div>
+    <div class="actions">
+      <button class="yes">Confirm</button>
+      <button class="no secondary">Cancel</button>
+      <span class="timer muted"></span>
+    </div>
+  </div>
+</template>
+<script src="/static/app.js"></script>
+</body>
+</html>
